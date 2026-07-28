@@ -8,6 +8,11 @@ Rehner SA, Gazis R, Doyle VP, Vieira WAS, Campos PM, Shao J. 2023. Genome Resour
 
 Msanne J, Shao J, Ashby R, Campos P, Liu Y, Solaiman D. 2023. Draft Genome Sequence of the Sophorolipid-Producing Yeast _Pseudohyphozyma bogoriensis_ ATCC 18809. Microbiol Resour Announc 12:e00566-22. https://doi.org/10.1128/mra.00566-22
 
+## Navigating the repository
+Below I will show steps on how the workflow progresses and examples of individual commands.
+
+See the directory funannotate_sbatch_scripts for examples of sbatches with more efficient setups such as Slurm arrays for parallel processing or loops to iterate through multiple samples.
+
 ## Linux environment and HPC usage
 The workflow was performed using Linux command line and the USDA-ARS SCINet high performance computing (HPC) clusters. Therefore, you will see commands such as salloc or module load to access SCINet resources, or sbatch scripts for submitting jobs in the Slurm scheduler.
 
@@ -193,11 +198,12 @@ sed -e 's/ length=.*$//' -e 's/\(SRR15242230.[0-9]\+\) [0-9]\+/\1\/2/' SRR152422
 
 Move the cleaned.fastq files to the train_funannotate directory.
 
-### Funannotate train using batch script
+### Funannotate train
+A full version of the sbatch script used for these next steps is in: 
+funannotate_sbatch_scripts/2a_sbatch_funannotate_train_rnaseq.sh
+
 ```
 cd /project/entfun/PHILIP_FUNGI_PROJECT/library/BEA/funannotate/train_funannotate
-
-nano sbatch_train_BEA.sh
 ```
 
 * First, set the input (sorted or masked fasta depending on preference).
@@ -206,36 +212,12 @@ nano sbatch_train_BEA.sh
 * –species and –strain will be used to name the training set. Use quotation marks if there are spaces in your names. In this example, Beauveria bassiana ARSEF 8028 will later become beauveria_bassiana_arsef_8028 in the database.
 
 ```
-#! /bin/bash
-
-#SBATCH --job-name="BEAtrain"
-#SBATCH -p short
-#SBATCH -N 1
-#SBATCH -n 24
-#SBATCH -t 48:00:00
-#SBATCH --mail-user=your.name@usda.gov
-#SBATCH --mail-type=END,FAIL
-#SBATCH -o "stdout.%j.%N"
-
-date
-
-module load miniconda
-
-source activate /project/entfun/PHILIP_FUNGI_PROJECT/software/funannotate_1.8.15
-
-export GENEMARK_PATH=/project/entfun/PHILIP_FUNGI_PROJECT/software/GeneMark-ES
-
-funannotate train -i ARSEF8028_sorted.fasta -o BEA_train_output \
-  --left SRR3269778_1_cleaned.fastq SRR3269779_1_cleaned.fastq SRR3269780_1_cleaned.fastq SRR15242230_1_cleaned.fastq \
-  --right SRR3269778_2_cleaned.fastq SRR3269779_2_cleaned.fastq SRR3269780_2_cleaned.fastq SRR15242230_2_cleaned.fastq \
-  --jaccard_clip --species "Beauveria bassiana" --strain "ARSEF 8028" --cpus ${SLURM_NTASKS}
-
-date
-```
-
-Submit the job
-```
-sbatch sbatch_train_BEA.sh
+funannotate train --cpus 20 \
+    -i ARSEF8028_contigs_sorted.fasta -o BEA_train_output \
+    --left SRR3269778_1_cleaned.fastq SRR3269779_1_cleaned.fastq SRR3269780_1_cleaned.fastq SRR15242230_1_cleaned.fastq \
+    --right SRR3269778_2_cleaned.fastq SRR3269779_2_cleaned.fastq SRR3269780_2_cleaned.fastq SRR15242230_2_cleaned.fastq \
+    --species "Beauveria bassiana" --strain "ARSEF 8028" \
+    --jaccard_clip 
 ```
 
 For this size of data, it took 4-5 hours to complete the job.
@@ -250,15 +232,9 @@ Successful training should produce a message such as this in the logs:
             -o BEA_train_output -s "Beauveria bassiana" --strain ARSEF 8028 --cpus 24
 ```
 
-### Funannotate predict with the RNA-seq trained data
+### Funannotate predict to store pretrained data
 
 In the same directory where the funannotate train output was placed, we will run funannotate predict.
-
-```
-cd /project/entfun/PHILIP_FUNGI_PROJECT/library/BEA/funannotate/train_funannotate
-```
-
-Run the first funannotate predict in the training directory.
 
 * Likely to take hours depending on size.
 * For the first run, input (-i) and output (-o) should be identical to funannotate train so the training data is used.
@@ -269,27 +245,9 @@ Run the first funannotate predict in the training directory.
   * Uses AUGUSTUS, GeneMark, Snap, GlimmerHMM, BUSCO, EVidence Modeler, tbl2asn, tRNAScan-SE, Exonerate, minimap2.
 
 ```
-#! /bin/bash
-
-#SBATCH --job-name="funpred"
-#SBATCH -p short
-#SBATCH -N 1
-#SBATCH -n 40
-#SBATCH -t 48:00:00
-#SBATCH --mail-user=your.name@usda.gov
-#SBATCH --mail-type=END,FAIL
-#SBATCH -o "stdout.%j.%N"
-
-date
-
-source activate /project/entfun/PHILIP_FUNGI_PROJECT/software/funannotate_1.8.15
-
-export GENEMARK_PATH=/project/entfun/PHILIP_FUNGI_PROJECT/software/GeneMark-ES
-
-funannotate predict -i ARSEF8028_sorted.fasta -o BEA_train_output \
---species "Beauveria bassiana" --strain "ARSEF 8028" --name bea --cpus 40 --force
-
-date
+funannotate predict --cpus 20 --force \
+    -i ARSEF8028_sorted.fasta -o BEA_train_output \
+    --species "Beauveria bassiana" --strain "ARSEF 8028" --name bea 
 ```
 
 After submitting the sbatch, you can confirm the training files were used in the logs:
@@ -354,47 +312,54 @@ These are NCBI issues that may delay submissions later on. Doing this now can pr
 
 ### Check for Ns > 100 in contigs files. Split sequences with this issue into two.
 
-### Funannoate predict
+### Funannoate predict parallel processing with Slurm array
 Now it is possible to mass run funannotate predict using the pretrained data. Pretrained data is called by –augustus_species.
 
-We used multiple batch scripts with approx. 10 samples in each sbatch. However, there are other ways to do process the jobs simutaneously if I were to redo this in 2026, such as Slurm arrays or building a Nextflow pipeline.
-
-```
-nano sbatch_fun_predict_set_1.sh
-```
-
+We had approx. 65 samples to run, so a Slurm array setup allowed parallel processing of multiple samples at the same time. This example comes from: funannotate_sbatch_scripts/3_sbatch_array_funannotate_predict.sh
 ```
 #! /bin/bash
 
-#SBATCH --job-name="funpred1"
-#SBATCH -p short
+#SBATCH --job-name="funpred"
+#SBATCH --array=1-65
+#SBATCH -p ceres
 #SBATCH -N 1
-#SBATCH -n 40
-#SBATCH -t 48:00:00
+#SBATCH -n 20
+#SBATCH -t 24:00:00
 #SBATCH --mail-user=your.name@usda.gov
 #SBATCH --mail-type=END,FAIL
 #SBATCH -o "stdout.%j.%N"
 
+# Specify the path to the config file
+config=./config_BEA_samples.txt
+
+# Extract the sample name for the current $SLURM_ARRAY_TASK_ID
+sample=$(awk -v ArrayTaskID=$SLURM_ARRAY_TASK_ID '$1==ArrayTaskID {print $2}' $config)
+
+# Extract the species, e.g. Beauveria bassiana
+species=$(awk -v ArrayTaskID=$SLURM_ARRAY_TASK_ID '$1==ArrayTaskID {print $3}' $config)
+
+# Extract the strain name/identifier, e.g. ARSEF 1816
+strain=$(awk -v ArrayTaskID=$SLURM_ARRAY_TASK_ID '$1==ArrayTaskID {print $4}' $config)
+
+# Extract the locus tag, e.g. NWO35
+locus_tag=$(awk -v ArrayTaskID=$SLURM_ARRAY_TASK_ID '$1==ArrayTaskID {print $5}' $config)
+
 date
+
+# Activate funannotate conda environment
+module load miniconda
 
 source activate /project/entfun/PHILIP_FUNGI_PROJECT/software/funannotate_1.8.15
 
+# Path to GeneMark-ES
 export GENEMARK_PATH=/project/entfun/PHILIP_FUNGI_PROJECT/software/GeneMark-ES
 
-funannotate predict -i A04_25_contigs_sorted.fasta -o A04_25_OUTPUT \
-  --species "Beauveria bassiana" --strain "ARSEF 1816" --name NWO35 --cpus 40 --force \
-  --protein_evidence $FUNANNOTATE_DB/uniprot_sprot.fasta --transcript_evidence transcripts_BEA.fasta \
-  --augustus_species beauveria_bassiana_arsef_8028
-
-funannotate predict -i A05_33_contigs_sorted.fasta -o A05_33_OUTPUT \
-  --species "Beauveria australis" --strain "ARSEF 4598" --name NWO36 --cpus 40 --force \
-  --protein_evidence $FUNANNOTATE_DB/uniprot_sprot.fasta --transcript_evidence transcripts_BEA.fasta \
-  --augustus_species beauveria_bassiana_arsef_8028
-
-funannotate predict -i A06_41_contigs_sorted.fasta -o A06_41_OUTPUT \
-  --species "Beauveria bassiana" --strain "ARSEF 6027" --name NWO37 --cpus 40 --force \
-  --protein_evidence $FUNANNOTATE_DB/uniprot_sprot.fasta --transcript_evidence transcripts_BEA.fasta \
-  --augustus_species beauveria_bassiana_arsef_8028
+# Run funannotate predict
+funannotate predict --cpus 20 --force \
+	-i ${sample}_contigs_sorted.fasta -o ${sample}_OUTPUT \
+	--species "${species}" --strain "${strain}" --name ${locus_tag} \
+	--protein_evidence $FUNANNOTATE_DB/uniprot_sprot.fasta --transcript_evidence transcripts_BEA.fasta \
+	--augustus_species beauveria_bassiana_arsef_8028 --busco_db sordariomycetes
 
 date
 ```
@@ -422,31 +387,12 @@ List of BUSCO fungi groups here: https://busco.ezlab.org/frames/fungi.htm
 
 ```
 funannotate setup -b sordariomycetes
-```
-```
-#! /bin/bash
 
-#SBATCH --job-name="buscseed"
-#SBATCH -p short
-#SBATCH -N 1
-#SBATCH -n 40
-#SBATCH -t 48:00:00
-#SBATCH --mail-user=your.name@usda.gov
-#SBATCH --mail-type=END,FAIL
-#SBATCH -o "stdout.%j.%N"
-
-date
-
-source activate /project/entfun/PHILIP_FUNGI_PROJECT/software/funannotate_1.8.15
-
-export GENEMARK_PATH=/project/entfun/PHILIP_FUNGI_PROJECT/software/GeneMark-ES
-
-funannotate predict -i ARSEF8028_contigs_sorted.fasta -o ARSEF8028_OUTPUT \
-  --species "Beauveria bassiana" --strain "ARSEF 8028" --name bea --cpus 40 --force \
-  --protein_evidence $FUNANNOTATE_DB/uniprot_sprot.fasta --transcript_evidence transcripts_BEA.fasta
+funannotate predict --cpus 20 --force \
+-i ARSEF8028_contigs_sorted.fasta -o ARSEF8028_OUTPUT \
+  --species "Beauveria bassiana" --strain "ARSEF 8028" --name bea \
+  --protein_evidence $FUNANNOTATE_DB/uniprot_sprot.fasta --transcript_evidence transcripts_BEA.fasta \
   --busco_seed_species fusarium_graminearum --busco_db sordariomycetes
-
-date
 ```
 
 After this run is complete, run funannotate species to add the training data to the database.
@@ -456,7 +402,7 @@ After this run is complete, run funannotate species to add the training data to 
 funannotate species -s beauveria_bassiana_arsef_8028 -a ARSEF8028_OUTPUT/predict_results/beauveria_bassiana_arsef_8028.parameters.json
 ```
 
-Now funannotate predict can be run on the other genomes as in the above section.
+Now funannotate predict can be run using a Slurm array on the other genomes as in the above section.
 
 ## Functional annotation
 
@@ -487,10 +433,11 @@ The example below is for a conda-installed antismash.
 ```
 source activate /project/entfun/PHILIP_FUNGI_PROJECT/software/antiSMASH
 
-antismash --taxon fungi --output-dir ARSEF8028_OUTPUT/antiSMASH_results \
-  --output-basename ARSEF8028_antiSMASH \
-  --genefinding-tool none \
-  ARSEF8028_OUTPUT/predict_results/Beauveria_bassiana_ARSEF_8028.gbk
+antismash --taxon fungi \
+    --output-dir ARSEF8028_OUTPUT/antiSMASH_results \
+    --output-basename ARSEF8028_antiSMASH \
+    --genefinding-tool none \
+    ARSEF8028_OUTPUT/predict_results/Beauveria_bassiana_ARSEF_8028.gbk
 ```
 
 ### Optional: Run Phobius
@@ -526,12 +473,13 @@ download_eggnog_data.py
 
 The program should incorporate the InterProScan5, antiSMASH, and Phobius results if the previous steps completed correctly and the files are present in annotate_misc. EggNog will be run in the middle of this script. This example will only incorporate antiSMASH.
 
-The annotate_results folder will have the final .tbl, .sqn, .gbk, etc.
+The annotate_results folder will have the final .tbl, .sqn, .gbk, etc. results files.
 ```
-funannotate annotate -i ARSEF8028_OUTPUT --sbt template_BEA_rehner.sbt \
-  --species "Beaveria bassiana" --strain "ARSEF 8028" --cpus 40 --force \
-  --antismash ARSEF_8028_OUTPUT/antiSMASH_results/ARSEF_8028_antiSMASH.gbk \
-  --busco_db sordariomycetes
+funannotate annotate  --cpus 20 --force \
+    -i ARSEF8028_OUTPUT --sbt template_BEA_rehner.sbt \
+    --species "Beaveria bassiana" --strain "ARSEF 8028" \
+    --antismash ARSEF_8028_OUTPUT/antiSMASH_results/ARSEF_8028_antiSMASH.gbk \
+    --busco_db sordariomycetes
 ```
 
 ## Submit to NCBI and perform final cleanup
@@ -552,9 +500,7 @@ cd /project/entfun/PHILIP_FUNGI_PROJECT/library/BEA/funannotate/contigs
 
 mkdir index
 
-cp bea_A04_25_contigs.fasta index/
-
-bowtie2-build bea_A04_25_contigs.fasta bea_A04_25_contigs
+bowtie2-build A04_25_contigs.fasta index/A04_25_contigs
 ```
 
 ### Run bowtie2 to make a .sam file
@@ -564,8 +510,8 @@ bowtie2-build bea_A04_25_contigs.fasta bea_A04_25_contigs
 #SBATCH --job-name="bowtie21"
 #SBATCH -p short
 #SBATCH -N 1
-#SBATCH -n 40
-#SBATCH -t 48:00:00
+#SBATCH -n 20
+#SBATCH -t 24:00:00
 #SBATCH --mail-user=your.name@usda.gov
 #SBATCH --mail-type=END,FAIL
 #SBATCH -o "stdout.%j.%N"
@@ -576,14 +522,14 @@ INPUT_DIR=/project/entfun/CLEANED_SEQUENCES
 
 module load bowtie2
 
-bowtie2 -p 40 -x index/bea_A04_25_contigs \
-  -1 ${INPUT_DIR}/CLEAN8896_5751_63395_HMTNYBGX3_SAR_WGS_1_2017SARS_1_A01_1_ATTACTCG_AGGCTAT A_R1.fastq \
-  -2 ${INPUT_DIR}/CLEAN8896_5751_63395_HMTNYBGX3_SAR_WGS_1_2017SARS_1_A01_1_ATTACTCG_AGGCTATA_R2.fastq \
-  -1 ${INPUT_DIR}/CLEAN8896_5751_63395_HY2MFBGX3_SAR_WGS_1_2017SARS_1_A01_1_ATTACTCG_AGGCTATA_R1.fastq \
-  -2 ${INPUT_DIR}/CLEAN8896_5751_63395_HY2MFBGX3_SAR_WGS_1_2017SARS_1_A01_1_ATTACTCG_AGGCTATA_R2.fastq \
-  -1 ${INPUT_DIR}/CLEAN9006_5751_63395_HWCW7BGX3_SAR_WGS_1_2017SARS_1_A01_1_ATTACTCG_AGGCTATA_R1.fastq \
-  -2 ${INPUT_DIR}/CLEAN9006_5751_63395_HWCW7BGX3_SAR_WGS_1_2017SARS_1_A01_1_ATTACTCG_AGGCTATA_R2.fastq \
-  --al-conc A04_25_map -S bea_A04_25.sam
+bowtie2 -p 20 -x index/A04_25_contigs \
+	-1 ${INPUT_DIR}/run1_cleaned_reads_R1.fastq \
+	-2 ${INPUT_DIR}/run1_cleaned_reads_R2.fastq \
+	-1 ${INPUT_DIR}/run2_cleaned_reads_R1.fastq \
+	-2 ${INPUT_DIR}/run2_cleaned_reads_R2.fastq \
+	-1 ${INPUT_DIR}/run3_cleaned_reads_R1.fastq \
+	-2 ${INPUT_DIR}/run3_cleaned_reads_R2.fastq \
+	--al-conc--gz A04_25_map.fastq.gz -S A04_25_map.sam
 
 date
 ```
@@ -592,11 +538,9 @@ date
 The output will have an “Average coverage” that will be used in the NCBI submission.
 
 ```
-salloc
-
 module load bbtools
 
-pileup.sh in=bea_A04_25.sam covstats=bea_A04_25_coverage.txt
+pileup.sh in=A04_25_map.sam covstats=A04_25_coverage.txt
 ```
 
 Sample output. Enter the “Average coverage” into the Genome Batch file from NCBI.
