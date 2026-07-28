@@ -13,6 +13,8 @@ The workflow was performed using the USDA-ARS SCINet high performance computing 
 
 ## Genome Assembly with SPAdes
 ```
+salloc
+
 module load spades
 
 spades -1 reads_R1.fastq.gz -2 reads_R2.fastq.gz -o output_folder
@@ -23,8 +25,6 @@ At the time, Funannotate version v1.8.15 was new, so a few extra steps were reco
 
 ### Install Mambaforge for smoother conda install
 ```
-salloc
-
 cd /project/entfun/PHILIP_FUNGI_PROJECT/software
 
 curl -L -O "https://github.com/conda-forge/miniforge/releases/latest/download/Mambaforge-Linux-x86_64.sh"
