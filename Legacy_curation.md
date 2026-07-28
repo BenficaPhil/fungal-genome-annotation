@@ -80,7 +80,7 @@ perl ../../../blastparser.pl combined_results_A04_25_fungi_ncbi_PC.txt > combine
 Review parse file and choose a database to continue with. We chose the fungi_ncbi database because having a larger database appeared to result in better matches and protein names.
 
 ## Fix protein names with Perl script
-Place the fix.pl script (made by Jonathan) into the funannotate folder.
+Place the fix_protein_names.pl script (made by Jonathan) into the funannotate folder.
 
 This script changes some names to “hypothetical protein” to be consistent with NCBI naming conventions.
 
@@ -89,7 +89,7 @@ Run fix.pl. Copy the result to make a version1.
 ```
 module load perl
 
-perl ../../../fix.pl combined_results_A04_25_fungi_ncbi_PC.parse > combined_results_A04_25_fungi_ncbi_PC.fix
+perl ../../../fix_protein_names.pl combined_results_A04_25_fungi_ncbi_PC.parse > combined_results_A04_25_fungi_ncbi_PC.fix
 
 cp combined_results_A04_25_fungi_ncbi_PC.fix combined_results_A04_25_fungi_ncbi_PC_fix.version1
 ```
