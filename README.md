@@ -8,16 +8,33 @@ Rehner SA, Gazis R, Doyle VP, Vieira WAS, Campos PM, Shao J. 2023. Genome Resour
 
 Msanne J, Shao J, Ashby R, Campos P, Liu Y, Solaiman D. 2023. Draft Genome Sequence of the Sophorolipid-Producing Yeast _Pseudohyphozyma bogoriensis_ ATCC 18809. Microbiol Resour Announc 12:e00566-22. https://doi.org/10.1128/mra.00566-22
 
-## HPC usage
-The workflow was performed using the USDA-ARS SCINet high performance computing (HPC) clusters. Therefore, you will see commands such as salloc or module load to access SCINet resources, or sbatch scripts for submitting jobs in the Slurm scheduler.
+## Linux environment and HPC usage
+The workflow was performed using Linux command line and the USDA-ARS SCINet high performance computing (HPC) clusters. Therefore, you will see commands such as salloc or module load to access SCINet resources, or sbatch scripts for submitting jobs in the Slurm scheduler.
 
-## Genome Assembly with SPAdes
+## Adapter trimming
+Example of adapter trimming on paired-end reads:
 ```
 salloc
 
+module load bbtools
+
+bbduk.sh -Xmx1g \
+    in1=reads_R1.fastq.gz in2=reads_R2.fastq.gz \
+    out1=cleaned_reads_R1.fastq.gz out2=cleaned_reads_R2.fastq.gz \
+    ref=adapters.fa ktrim=r k=23 mink=11 hdist=1 tpe tbo
+```
+
+## Genome Assembly with SPAdes
+Example of assembly on trimmed paired-end reads (inputting multiple sequencing runs):
+```
 module load spades
 
-spades -1 reads_R1.fastq.gz -2 reads_R2.fastq.gz -o output_folder
+spades.py -t 20 \
+    -1 run1_cleaned_reads_R1.fastq.gz -2 run1_cleaned_reads_R2.fastq.gz \
+    -1 run2_cleaned_reads_R1.fastq.gz -2 run2_cleaned_reads_R2.fastq.gz \
+    -1 run3_cleaned_reads_R1.fastq.gz -2 run3_cleaned_reads_R2.fastq.gz \
+    -o sample_name_output \
+    -k 55,77,93,105 --careful
 ```
 
 ## Installing Funannotate via Conda
