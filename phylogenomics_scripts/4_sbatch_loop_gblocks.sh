@@ -47,8 +47,8 @@ for file in *.fasta.gb;
 	do sed 's/ //g' $file > IQTree/"${file%.gb}"; 
 done
 
-cd partitions
+mkdir partitions
 
-python count_alignment_length.py
+python 5_count_alignment_length.py
 
 date
