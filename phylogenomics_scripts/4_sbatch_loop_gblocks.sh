@@ -12,9 +12,9 @@
 date
 
 # Run this script inside the NEXUS folder after MAFFT alignment.
-ls *.txt > alignments.list
+ls *.fasta > alignments.list
 
-grep -c ">" *.txt > seq_number.list
+grep -c ">" *.fasta > seq_number.list
 
 sed 's/[^:]*://' seq_number.list | awk '{print int(($1 / 2) + 1 + ($1 % 2 != 0 ? 0.5 : 0))}' > values.list
 
