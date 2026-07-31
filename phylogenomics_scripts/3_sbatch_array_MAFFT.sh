@@ -24,6 +24,6 @@ module load mafft
 
 # For example, mafft --auto odb_10007.fasta > NEXUS/odb_10007.fasta
 # Output to NEXUS folder
-mafft --auto ${odb_id}.fasta > NEXUS/${odb_id}.fasta
+mafft --auto ${odb_id}/${odb_id}.fasta > NEXUS/${odb_id}.fasta
 
 date
